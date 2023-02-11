@@ -1,0 +1,10 @@
+[package]
+name = "et-slideshow"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sycamore = "0.8"
+
+[profile.release]
+lto = true
