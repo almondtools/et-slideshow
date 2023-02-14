@@ -1,98 +1,122 @@
 #![feature(variant_count)]
 
-use crate::Slides::{First, Second, Third};
-use std::mem;
+use std::rc::Rc;
+
+use backend::Backend;
+use backend::SlideData;
 use sycamore::prelude::*;
+
+mod backend;
 
 fn main() {
     sycamore::render(|cx| {
-        let slide: &Signal<Slides> = create_signal(cx, First);
-        let slide_info: &ReadSignal<SlideInfo> = create_memo(cx, || slide.get().info());
+        let model: &Signal<Slider> = create_signal(cx, Slider::new());
+        let slide: &ReadSignal<Slide> = create_memo(cx, || model.get().slide());
 
         view! { cx,
             div(class="slideshow-container") {
-                Slide(info=slide_info)
-                a(class="next", on:click=|_| { next(slide) }) { "❯" }
+                Slide(slide=slide)
+                Navigation(model=model)
             }
         }
     });
 }
 
-pub enum Slides {
-    First,
-    Second,
-    Third,
+pub struct Slider {
+    state: usize,
+    backend: Rc<Backend>,
 }
 
-impl Slides {
-    pub fn next(&self) -> Slides {
-        match self {
-            First => Second,
-            Second => Third,
-            Third => First,
+impl Slider {
+    pub fn new() -> Slider {
+        let state = 0;
+        let backend = Rc::new(Backend::new());
+        Slider { state, backend }
+    }
+
+    pub fn next_slide(&self) -> Slider {
+        let all = self.backend.number_of_slides();
+        let state = (self.state + 1) % all;
+        let backend = self.backend.clone();
+        Slider { state, backend }
+    }
+
+    pub fn prev_slide(&self) -> Slider {
+        let all = self.backend.number_of_slides();
+        let state = (self.state + all - 1) % all;
+        let backend = self.backend.clone();
+        Slider { state, backend }
+    }
+
+    pub fn slide(&self) -> Slide {
+        use SlideData::*;
+        let data = self.backend.fetch(self.state);
+        if let Some(ImageText { src, label }) = data {
+            Slide {
+                header: self.number_text(),
+                src: src.into(),
+                label: label.unwrap_or("").into(),
+            }
+        } else if let Some(Text(label)) = data {
+            Slide::text(self.number_text(), label.into())
+        } else {
+            Slide::empty(self.number_text())
         }
     }
 
-    pub fn info(&self) -> SlideInfo {
-        match self {
-            First => Self::first_slide_info(),
-            Second => Self::second_slide_info(),
-            Third => Self::third_slide_info(),
-        }
-    }
-
-    fn first_slide_info() -> SlideInfo {
-        SlideInfo {
-            number_text: Self::number_text(1),
-            src: "assets/wald.png".into(),
-            caption_text: "Wald".into(),
-        }
-    }
-
-    fn second_slide_info() -> SlideInfo {
-        SlideInfo {
-            number_text: Self::number_text(2),
-            src: "assets/schnee.png".into(),
-            caption_text: "Schnee".into(),
-        }
-    }
-
-    fn third_slide_info() -> SlideInfo {
-        SlideInfo {
-            number_text: Self::number_text(3),
-            src: "assets/berge.png".into(),
-            caption_text: "Berge".into(),
-        }
-    }
-
-    fn number_text(number: u32) -> String {
-        format!("{} / {}", number, mem::variant_count::<Slides>())
+    fn number_text(&self) -> String {
+        format!("{} / {}", self.state + 1, self.backend.number_of_slides())
     }
 }
 
-fn next(slide: &Signal<Slides>) {
-    slide.set(slide.get().next());
+pub struct Slide {
+    header: String,
+    src: String,
+    label: String,
+}
+
+impl Slide {
+    pub fn text(number_text: String, label: String) -> Self {
+        Slide {
+            header: number_text,
+            src: "assets/black.png".into(),
+            label,
+        }
+    }
+    pub fn empty(number_text: String) -> Self {
+        Slide {
+            header: number_text,
+            src: "assets/black.png".into(),
+            label: "--".into(),
+        }
+    }
 }
 
 #[derive(Prop)]
 pub struct SlideProps<'a> {
-    info: &'a ReadSignal<SlideInfo>,
+    slide: &'a ReadSignal<Slide>,
 }
 
-pub struct SlideInfo {
-    number_text: String,
-    src: String,
-    caption_text: String,
-}
-
-//noinspection RsFunctionNaming
 #[component]
 pub fn Slide<'a, G: Html>(cx: Scope<'a>, props: SlideProps<'a>) -> View<G> {
     view! { cx,
         div {
-          div(class="numbertext"){ (props.info.get().number_text) }
-          img(src=(props.info.get().src), style="width:100%")
-          div(class="text") { (props.info.get().caption_text) }
+          div(class="numbertext"){ (props.slide.get().header) }
+          img(src=(props.slide.get().src), style="width:100%")
+          div(class="text") { (props.slide.get().label) }
         }
+    }
+}
+
+#[derive(Prop)]
+pub struct NavigationProps<'a> {
+    model: &'a Signal<Slider>,
+}
+
+#[component]
+pub fn Navigation<'a, G: Html>(cx: Scope<'a>, props: NavigationProps<'a>) -> View<G> {
+    view! { cx,
+        a(class="prev", on:click=|_| { props.model.set(props.model.get().prev_slide()) }) { "❮" }
+        a(class="next", on:click=|_| { props.model.set(props.model.get().next_slide()) }) { "❯" }
     }
 }
