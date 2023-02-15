@@ -110,7 +110,7 @@ pub fn Slide<'a, G: Html>(cx: Scope<'a>, props: SlideProps<'a>) -> View<G> {
 
 #[derive(Prop)]
 pub struct NavigationProps<'a> {
-    model: &'a Signal<Slider>,
+    model: &'a Signal<Slider>
 }
 
 #[component]
@@ -118,5 +118,6 @@ pub fn Navigation<'a, G: Html>(cx: Scope<'a>, props: NavigationProps<'a>) -> Vie
     view! { cx,
         a(class="prev", on:click=|_| { props.model.set(props.model.get().prev_slide()) }) { "❮" }
         a(class="next", on:click=|_| { props.model.set(props.model.get().next_slide()) }) { "❯" }
+        input(type="text")
     }
 }
